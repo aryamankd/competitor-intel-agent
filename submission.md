@@ -67,7 +67,7 @@ The agent is built using the **Claude API** (`claude-sonnet-4-6`) with Anthropic
 User invokes agent
         │
         ▼
- System prompt (analyst role, Workday context)
+ System prompt (Workday analyst role, product context, signal filter)
  User prompt (competitors, signal categories, output format)
  + Previous brief injected if memory file exists (delta analysis)
         │
@@ -86,6 +86,7 @@ User invokes agent
 
 **Key design decisions:**
 
+- **Workday-specific system prompt:** The system prompt encodes Workday's five core products, known competitive strengths and vulnerabilities, audience definitions (VP Product, Sales Enablement, CPO), and a signal relevance filter. This means Claude discards noise before searching rather than surfacing everything and leaving filtering to the reader. It also instructs Claude to run 2–3 targeted searches per competitor rather than exhaustive coverage — directly reducing token usage and cost.
 - **`claude-sonnet-4-6` over `claude-opus-4-6`:** Sonnet is ~5x cheaper ($3/$15 per million tokens vs $15/$75) with no meaningful quality drop for a search-and-summarize task. Opus's extended reasoning capability is not needed here.
 - **No adaptive thinking:** The original implementation used `thinking: {"type": "adaptive"}`, which added significant hidden token spend on internal reasoning before each response. For this use case, it added cost without proportional output quality improvement.
 - **Streaming with mid-stream cost cancellation:** Rather than blocking on a single `messages.create()` call (which can hang silently for minutes while the server executes web searches), the agent streams the response. On every `message_start` and `content_block_delta` event, cumulative cost is estimated. If the $2 limit is hit mid-response, the stream is closed and partial results are returned.

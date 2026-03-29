@@ -64,6 +64,22 @@ The agent searches for signals across:
 - Customer wins and analyst coverage
 - Messaging and positioning shifts
 
+Signals are filtered before inclusion — only surfaced if they could affect a Workday deal in the next 6 months, attack an area where Workday has a product lead, or change the competitive narrative with analysts or prospects. Minor blog posts, generic "AI strategy" announcements, awards, and CSR news are discarded.
+
+---
+
+## System Prompt Design
+
+The system prompt encodes Workday-specific context so Claude reasons like an internal analyst, not a generic summarizer:
+
+**Workday's core products** (HCM, Adaptive Planning, Financial Management, Skills Cloud, Extend) are listed explicitly so Claude knows what's at risk when a competitor makes a move.
+
+**Competitive position** — Workday's strengths (unified data model, Skills Cloud lead, enterprise retention) and known vulnerabilities (TCO, mid-market traction, UX perception gap) are documented. This lets Claude assess signal severity: an attack on a known weak spot is flagged differently from a move into a segment Workday dominates.
+
+**Audience definitions** — the brief is framed for three readers: VP of Product Strategy (roadmap threats), Head of Sales Enablement (battlecard triggers), and Chief People Officer (board narrative). Claude writes for the person who will act on each finding.
+
+**Search strategy** — Claude is instructed to run 2–3 targeted searches per competitor rather than exhaustive coverage. This directly reduces web search volume, context window usage, and cost.
+
 ---
 
 ## Memory / Delta Tracking
