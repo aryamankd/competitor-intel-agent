@@ -76,9 +76,27 @@ The system prompt encodes Workday-specific context so Claude reasons like an int
 
 **Competitive position** — Workday's strengths (unified data model, Skills Cloud lead, enterprise retention) and known vulnerabilities (TCO, mid-market traction, UX perception gap) are documented. This lets Claude assess signal severity: an attack on a known weak spot is flagged differently from a move into a segment Workday dominates.
 
-**Audience definitions** — the brief is framed for three readers: VP of Product Strategy (roadmap threats), Head of Sales Enablement (battlecard triggers), and Chief People Officer (board narrative). Claude writes for the person who will act on each finding.
+**Audience definitions** — the brief is framed for three readers: VP of Product Strategy (roadmap threats), Head of Sales Enablement (battlecard triggers), and Chief People Officer (board narrative).
 
-**Search strategy** — Claude is instructed to run 2–3 targeted searches per competitor rather than exhaustive coverage. This directly reduces web search volume, context window usage, and cost.
+**Source quality tiers** — sources are ranked Tier 1 (official newsrooms, SEC filings) → Tier 2 (reputable press, G2/Gartner) → Tier 3 (forums, social). High-impact claims require ≥2 independent Tier 1/2 sources.
+
+**Evidence thresholds** — claims below the evidence threshold are labelled `LOW_EVIDENCE` and excluded from the Executive Summary. If a competitor yields no verifiable signals, the output states `INSUFFICIENT EVIDENCE` rather than fabricating content.
+
+**Search strategy** — Claude outputs an explicit search plan (`competitor | query | source type`) before executing, making reasoning inspectable. 2–3 targeted searches per competitor rather than exhaustive coverage.
+
+---
+
+## Scoring & Action Catalog
+
+Every signal is scored on:
+- **Impact (1–5):** How significantly would this affect Workday's revenue or roadmap?
+- **Likelihood (1–5):** How likely to affect an active deal in the next 6 months?
+- **Time horizon:** NEAR (<3mo) / MID (3–9mo) / LONG (9mo+)
+- **Confidence:** A (2+ Tier 1/2 sources) / B (1 Tier 1/2 or 2+ Tier 3) / C (single Tier 3)
+
+**Risk score** = Impact × Likelihood (used to rank the Risk Radar section).
+
+Recommended actions are constrained to a fixed catalog: `BATTLECARD_UPDATE`, `ROADMAP_FLAG`, `PRICING_ALERT`, `PARTNER_WATCH`, `MONITOR` — each with an assigned owner (Sales Enablement / Product Strategy / Executive / Marketing).
 
 ---
 

@@ -90,16 +90,42 @@ Only include a signal if it meets at least one of these criteria:
 awards, CSR news, and anything without a verifiable source.
 
 ## Search Strategy
-Be targeted, not broad. For each competitor, run 2–3 focused searches rather than \
-exhaustive coverage. Prioritize:
+For each competitor, run 2–3 focused searches in this priority order:
 1. Product release notes and feature announcements (last 90 days)
 2. Job postings in engineering/product that signal roadmap direction
 3. Pricing or packaging changes (G2 reviews, customer forums, sales leaks)
 4. Partnership announcements that extend their platform reach
 
+Before executing searches, state your search plan as a brief list: \
+`competitor | query | expected source type`. This makes your reasoning inspectable.
+
+## Source Quality Ranking
+Rank sources in this order and prefer higher-ranked sources:
+1. **Tier 1 (HIGH):** Official newsrooms, product release notes, SEC filings, company blog
+2. **Tier 2 (MED):** Reputable press (TechCrunch, WSJ, Bloomberg), G2/Gartner/IDC reports
+3. **Tier 3 (LOW):** LinkedIn posts, job boards, forums, social media, anonymous reviews
+
+## Evidence Thresholds
+- **High-impact claims** (pricing changes, major product launches, market segment moves): \
+require ≥2 independent Tier 1 or Tier 2 sources with publication dates. \
+If you cannot meet this threshold, label the signal LOW_EVIDENCE and do not include it \
+in the Executive Summary.
+- **Supporting signals** (hiring trends, positioning shifts): 1 source acceptable, \
+but state the source tier and date explicitly.
+- **Insufficient evidence:** If a competitor yields fewer than 2 verifiable signals, \
+write "INSUFFICIENT EVIDENCE — [reason]" for that competitor rather than fabricating signals.
+
+## Confidence Scoring
+Assign each signal a confidence level:
+- **A** — 2+ independent Tier 1/2 sources with dates within 90 days
+- **B** — 1 Tier 1/2 source, or 2+ Tier 3 sources with dates
+- **C** — single Tier 3 source, or source without a clear publication date
+
+Do not include Confidence C signals in the Executive Summary.
+
 ## Output Standards
-- Cite sources with URLs where available
-- Distinguish confirmed facts from inferences (label inferences explicitly)
+- Every signal must include: source URL, publication date, source tier, and confidence level
+- Distinguish confirmed facts from inferences — label inferences as [INFERRED]
 - Be direct — executives will act on this, not read it for interest
 - If a signal is ambiguous, say so rather than forcing a conclusion"""
 
@@ -293,30 +319,64 @@ Compare your new findings against the previous brief above. For each competitor,
 
 In the Executive Summary, lead with what has *changed* since last week, not just the current state."""
 
+    memory_reconciliation = ""
+    if previous_brief:
+        memory_reconciliation = """
+## Step 0 — Memory Reconciliation (do this before searching)
+Review the top 3 claims from the previous brief. For each:
+- Search to verify it is still accurate and current
+- If contradicted by new evidence, mark it RETRACTED with the contradicting source
+- If confirmed, carry it forward with CONFIRMED label
+Only then proceed to new signal search.
+"""
+
     user_prompt = f"""Conduct a competitor intelligence scan for Workday as of {current_date}.
 
 Analyze these competitors: {', '.join(competitors)}
 
 Search for recent signals in each of these categories:
-{signal_list}{focus_str}{memory_str}
+{signal_list}{focus_str}{memory_reconciliation}{memory_str}
 
-Deliver a structured intelligence brief with these sections:
+---
 
-## Executive Summary
-3–5 highest-priority findings that require Workday's attention. Be direct.
-{"Lead with what changed since the previous brief." if previous_brief else ""}
+## Output Format
 
-## Competitor Signals
-For each competitor, list recent signals with:
-- Signal (what happened, with source/URL if available)
-- Strategic implication for Workday
-- Recommended response (product, sales, or marketing action)
+### Step 1 — Search Plan
+Before executing any searches, list your plan:
+`[competitor] | [search query] | [expected source type]`
+Limit to 2–3 searches per competitor.
 
-## Risk Radar
-What competitive threats should Workday monitor closely over the next quarter?
+### Step 2 — Executive Summary
+{"Lead with what CHANGED since the previous brief." if previous_brief else ""}
+3–5 highest-priority findings (Confidence A or B only). Be direct. \
+Each finding must reference a source and date.
 
-## Signal Gaps
-Where was information sparse or unavailable? What should be monitored differently?
+### Step 3 — Competitor Signals
+For each competitor, list signals in this exact format:
+
+**Signal:** [what happened — be specific, not generic]
+**Date:** [publication date of source]
+**Source:** [URL] (Tier [1/2/3])
+**Confidence:** [A / B / C]
+{"**Delta:** [🆕 NEW / 📈 ESCALATING / 📉 DE-ESCALATING / ✅ RESOLVED]" if previous_brief else ""}
+**Impact on Workday (1–5):** [score] — [one-line reason]
+**Likelihood of materially affecting a deal (1–5):** [score]
+**Time horizon:** [NEAR <3mo / MID 3–9mo / LONG 9mo+]
+**Strategic implication:** [what this means for Workday's position]
+**Recommended action:** [exactly one of: BATTLECARD_UPDATE / ROADMAP_FLAG / PRICING_ALERT / PARTNER_WATCH / MONITOR]
+**Action owner:** [Sales Enablement / Product Strategy / Executive / Marketing]
+
+If evidence is insufficient for a competitor, write:
+`INSUFFICIENT EVIDENCE — [reason, e.g., no public announcements in 90 days]`
+
+### Step 4 — Risk Radar
+Rank the top threats using this model:
+`Risk score = Impact × Likelihood` (both 1–5)
+For each risk: state score, time horizon, and what would accelerate it.
+
+### Step 5 — Signal Gaps
+Where was evidence sparse, paywalled, or below the evidence threshold?
+What search approach would improve coverage next run?
 
 Be concise and decision-focused. Avoid filler. Executives will act on this."""
 
@@ -420,6 +480,29 @@ Be concise and decision-focused. Avoid filler. Executives will act on this."""
     final_text = "\n".join(
         block.text for block in content if block.type == "text"
     )
+
+    # ── Output completeness validation ────────────────────────────────────────
+    required_sections = [
+        "Executive Summary",
+        "Competitor Signals",
+        "Risk Radar",
+        "Signal Gaps",
+    ]
+    missing = [s for s in required_sections if s not in final_text]
+    if missing:
+        print(
+            f"[warn] Output missing sections: {', '.join(missing)}. "
+            "Brief may be partial due to cost guardrail or early termination.",
+            file=sys.stderr,
+        )
+
+    for competitor in competitors:
+        name = competitor.split(" ")[0]  # e.g. "SAP" from "SAP SuccessFactors"
+        if name not in final_text:
+            print(
+                f"[warn] No signals found for {competitor} in output.",
+                file=sys.stderr,
+            )
 
     return {
         "generated_at": datetime.now().isoformat(),
