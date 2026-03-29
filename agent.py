@@ -22,15 +22,24 @@ from fpdf import FPDF
 
 # ─── Configuration ────────────────────────────────────────────────────────────
 
-MODEL = "claude-opus-4-6"
+MODEL = "claude-sonnet-4-6"
+
+# Cost guardrail — abort if estimated spend exceeds this during a run
+MAX_COST_USD = 2.00
+
+# claude-sonnet-4-6 pricing (per million tokens)
+_INPUT_PRICE_PER_M  = 3.00
+_OUTPUT_PRICE_PER_M = 15.00
+
+
+def _estimate_cost(input_tokens: int, output_tokens: int) -> float:
+    return (input_tokens / 1_000_000 * _INPUT_PRICE_PER_M
+            + output_tokens / 1_000_000 * _OUTPUT_PRICE_PER_M)
 
 COMPETITORS = [
     "SAP SuccessFactors",
     "Oracle HCM Cloud",
     "Rippling",
-    "ADP Workforce Now",
-    "Ceridian Dayforce",
-    "UKG (Ultimate Kronos Group)",
 ]
 
 # Signal categories the agent prioritizes when searching
@@ -178,7 +187,8 @@ def save_pdf(result: dict, output_path: str) -> None:
     pdf.multi_cell(
         0, 4,
         f"Tokens used — Input: {result['usage']['input_tokens']:,}  "
-        f"Output: {result['usage']['output_tokens']:,}"
+        f"Output: {result['usage']['output_tokens']:,}  "
+        f"| Estimated cost: ${result['usage']['estimated_cost_usd']:.4f}"
     )
     pdf.multi_cell(0, 4, "Sources: live web search via Anthropic web_search tool. "
                          "Verify critical claims before use in sales or executive contexts.")
@@ -211,7 +221,7 @@ def run_intelligence_scan(
     competitors: list[str],
     focus_areas: list[str] | None = None,
     previous_brief: dict | None = None,
-    max_continuations: int = 5,
+    max_continuations: int = 2,
 ) -> dict:
     """
     Run a competitor intelligence scan using Claude with web search.
@@ -225,7 +235,7 @@ def run_intelligence_scan(
 
     Returns a dict with the intelligence brief and usage metadata.
     """
-    client = anthropic.Anthropic()
+    client = anthropic.Anthropic(timeout=300.0)  # 5-minute hard cap per API call
 
     current_date = datetime.now().strftime("%B %d, %Y")
     focus_str = (
@@ -283,26 +293,87 @@ Be concise and decision-focused. Avoid filler. Executives will act on this."""
 
     messages = [{"role": "user", "content": user_prompt}]
     continuations = 0
+    total_input_tokens = 0
+    total_output_tokens = 0
+    content = []
+    stop_reason = "end_turn"
 
     while True:
-        response = client.messages.create(
+        call_input_tokens = 0
+        accumulated_output_chars = 0
+        cost_limit_hit = False
+
+        with client.messages.stream(
             model=MODEL,
-            max_tokens=8000,
-            thinking={"type": "adaptive"},
+            max_tokens=4000,
             system=SYSTEM_PROMPT,
-            tools=[
-                {"type": "web_search_20260209", "name": "web_search"},
-            ],
+            tools=[{"type": "web_search_20260209", "name": "web_search"}],
             messages=messages,
+        ) as stream:
+            for event in stream:
+                etype = getattr(event, "type", None)
+
+                if etype == "message_start":
+                    call_input_tokens = event.message.usage.input_tokens
+                    cost = _estimate_cost(
+                        total_input_tokens + call_input_tokens,
+                        total_output_tokens,
+                    )
+                    if cost >= MAX_COST_USD:
+                        cost_limit_hit = True
+                        break
+
+                elif etype == "content_block_delta":
+                    delta = event.delta
+                    chunk = getattr(delta, "text", None) or ""
+                    accumulated_output_chars += len(chunk)
+                    cost = _estimate_cost(
+                        total_input_tokens + call_input_tokens,
+                        total_output_tokens + accumulated_output_chars // 4,
+                    )
+                    if cost >= MAX_COST_USD:
+                        cost_limit_hit = True
+                        break
+
+            if cost_limit_hit:
+                snapshot = stream.current_message_snapshot
+                content = snapshot.content if snapshot else []
+                usage = getattr(snapshot, "usage", None)
+                call_input_tokens = usage.input_tokens if usage else call_input_tokens
+                call_output_tokens = usage.output_tokens if usage else accumulated_output_chars // 4
+                stop_reason = "cost_limit"
+            else:
+                msg = stream.get_final_message()
+                content = msg.content
+                call_input_tokens = msg.usage.input_tokens
+                call_output_tokens = msg.usage.output_tokens
+                stop_reason = msg.stop_reason
+
+        total_input_tokens += call_input_tokens
+        total_output_tokens += call_output_tokens
+        estimated_cost = _estimate_cost(total_input_tokens, total_output_tokens)
+
+        print(
+            f"  [cost] ~${estimated_cost:.3f} so far "
+            f"({total_input_tokens:,} in / {total_output_tokens:,} out)",
+            file=sys.stderr,
         )
 
-        if response.stop_reason == "end_turn":
+        if stop_reason == "cost_limit":
+            print(
+                f"[guardrail] Cost limit ${MAX_COST_USD:.2f} hit mid-response. "
+                "Stopped stream and using partial results.",
+                file=sys.stderr,
+            )
             break
 
-        if response.stop_reason == "pause_turn":
+        if stop_reason == "end_turn":
+            break
+
+        if stop_reason == "pause_turn":
             # Server-side sampling loop hit its iteration limit.
             # Append the assistant turn and re-send — the API resumes automatically.
-            messages.append({"role": "assistant", "content": response.content})
+            messages.append({"role": "assistant", "content": content})
             continuations += 1
             if continuations >= max_continuations:
                 print(
@@ -314,14 +385,11 @@ Be concise and decision-focused. Avoid filler. Executives will act on this."""
             continue
 
         # Unexpected stop reason — exit loop
-        print(
-            f"[warn] Unexpected stop_reason: {response.stop_reason}",
-            file=sys.stderr,
-        )
+        print(f"[warn] Unexpected stop_reason: {stop_reason}", file=sys.stderr)
         break
 
     final_text = "\n".join(
-        block.text for block in response.content if block.type == "text"
+        block.text for block in content if block.type == "text"
     )
 
     return {
@@ -331,8 +399,9 @@ Be concise and decision-focused. Avoid filler. Executives will act on this."""
         "previous_brief_date": previous_brief.get("generated_at", "")[:10] if previous_brief else None,
         "intelligence_brief": final_text,
         "usage": {
-            "input_tokens": response.usage.input_tokens,
-            "output_tokens": response.usage.output_tokens,
+            "input_tokens": total_input_tokens,
+            "output_tokens": total_output_tokens,
+            "estimated_cost_usd": round(_estimate_cost(total_input_tokens, total_output_tokens), 4),
         },
     }
 
@@ -377,7 +446,8 @@ def main():
     print("\n" + "─" * 64)
     print(
         f"Tokens — Input: {result['usage']['input_tokens']:,}  "
-        f"Output: {result['usage']['output_tokens']:,}"
+        f"Output: {result['usage']['output_tokens']:,}  "
+        f"| Estimated cost: ${result['usage']['estimated_cost_usd']:.4f}"
     )
 
     # Save timestamped archive copies (JSON + PDF)

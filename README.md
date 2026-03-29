@@ -30,9 +30,8 @@ You run it. It searches the web across product pages, job boards, press releases
 | SAP SuccessFactors | Largest direct competitor in enterprise HCM |
 | Oracle HCM Cloud | Head-to-head in large enterprise and finance |
 | Rippling | Fast-growing challenger in mid-market HR + IT |
-| ADP Workforce Now | Dominant in payroll; expanding into HCM |
-| Ceridian Dayforce | Strong in workforce management and compliance |
-| UKG | Competing in scheduling and mid-market HCM |
+
+**Why three instead of six:** Each competitor triggers multiple server-side web searches (product news, job boards, press, analyst coverage). With 6 competitors and 7 signal categories, a single run executes 40+ searches, flooding the context window with search results. When `pause_turn` continuations occur, that entire history is re-sent as input tokens — causing costs to exceed $2 per run. Reducing to 3 competitors cuts search volume roughly in half and keeps runs well within budget. ADP Workforce Now, Ceridian Dayforce, and UKG can be added back via `COMPETITORS` in `agent.py` if needed.
 
 ---
 
