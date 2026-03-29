@@ -357,7 +357,7 @@ def main():
         print("\nMemory: no previous brief found — running full baseline scan")
 
     print("\nSearching across: product news, job boards, press, analyst coverage")
-    print("This may take 30–60 seconds...\n")
+    print("This may take 2–5 minutes (multiple live web searches across 6 competitors)...\n")
 
     result = run_intelligence_scan(
         competitors=COMPETITORS,

@@ -102,6 +102,8 @@ export ANTHROPIC_API_KEY=your_key_here
 python3 agent.py
 ```
 
+**Runtime:** Expect 2–5 minutes per run. The agent executes 20–40+ live web searches across 6 competitors and multiple signal categories, with each search being a round-trip to Anthropic's servers. Claude may also re-send the conversation multiple times if the server-side search iteration limit is hit.
+
 **First run:** Full baseline scan. Saves `last_brief.json` as memory for next run.
 
 **Subsequent runs:** Delta analysis — compares against previous brief and flags what changed.
