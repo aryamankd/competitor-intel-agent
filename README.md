@@ -36,6 +36,24 @@ You run it. It searches the web across product pages, job boards, press releases
 
 ---
 
+## How Signals Are Sourced
+
+The agent uses **Anthropic's server-side web search tool** (`web_search_20260209`). There are no external APIs, scrapers, or pre-indexed databases involved.
+
+When the agent runs, Claude is given the web search tool and autonomously:
+1. Decides what queries to run based on the competitors and signal categories in the prompt
+2. Executes those searches on Anthropic's infrastructure
+3. Filters and reads the results within its context window
+4. Synthesizes findings into the structured brief
+
+Because searches happen at runtime against live web sources, the brief reflects current information — not a snapshot from a vendor's database that may be weeks or months stale.
+
+**What it can reach:** Public web — company newsrooms, product blogs, job boards (LinkedIn, Greenhouse, Lever), press releases, G2/Gartner reviews, conference announcements, partner pages.
+
+**What it cannot reach:** Paywalled content (Gartner Magic Quadrant full reports, private pricing, LinkedIn Sales Navigator). The `Signal Gaps` section of every brief flags where coverage was limited.
+
+---
+
 ## Signal Categories
 
 The agent searches for signals across:
